@@ -1,0 +1,80 @@
+# Version:   Vagranfile.portable.simplified.
+# Note:  vm.synced_folder requires first running "vagrant plugin install vagrant-vbguest"
+
+# A script to install docker Community Edition
+$INSTALLDOCKERCE = <<EOF
+echo "Installing Docker CE...."
+#yum update -y		# Commented out to speed up provisioning.  
+rpm -e *docker*		# Remove any pre-installed docker.  
+yum -y install yum-utils device-mapper-peristent-data lvm2   # Docker Prereqs.
+yum -y install libnss-mdns avahi-daemon 	 # Enable multicast DNS.
+yum -y install elinks		# Useful for testing httpd services.
+yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+yum -y install docker-ce
+systemctl enable docker && systemctl start docker 
+EOF
+
+# A script to Setup Docker storage
+$CONFIGUREDOCKER = <<EOF
+echo "Setting up docker Storage..."
+echo "{ "storage driver":"devicemapper" }" >> /etc/docker.daemon.json 
+systemctl restart docker  
+EOF
+
+# A script to Initialize the swarm for managers
+$INITSWARM = <<EOF
+echo "Initializing swarm... (Manager only)"
+[ -e /var/tmp/swarm_init ] || docker swarm init --advertise-addr eth1 && touch /var/tmp/swarm_init
+docker swarm join-token worker  |grep join > /vagrantshare/joinswarm.sh
+EOF
+
+# A script to Join the swarm for workers.
+$JOINSWARM = <<EOF
+echo "Joining Swarm... (Workers only)"
+[ -e /var/tmp/swarm_worker ] || /vagrantshare/joinswarm.sh && touch /var/tmp/swarm_worker
+EOF
+
+# Configurable Variables
+BASE_IMAGE = "centos/7"
+WORKER_NODES = 2
+MANAGERMEM = 3000
+MANAGERCPUS = 2
+WORKERMEM = 2000
+WORKERCPUS = 1
+
+
+Vagrant.configure("2") do |config|
+  config.vm.define "docker0" do |subconfig|
+	subconfig.vm.host_name = "docker0"
+	subconfig.vm.box = BASE_IMAGE
+	subconfig.vm.synced_folder ".", "/vagrantshare"
+	subconfig.vm.network "private_network", type: "dhcp"
+
+	subconfig.vm.provision "shell", inline: $INSTALLDOCKERCE
+	subconfig.vm.provision "shell", inline: $CONFIGUREDOCKER
+	subconfig.vm.provision "shell", inline: $INITSWARM
+
+	subconfig.vm.provider :virtualbox do |vb|
+          vb.customize ["modifyvm", :id, "--memory", MANAGERMEM ]
+          vb.customize ["modifyvm", :id, "--cpus", MANAGERCPUS ]
+        end
+  end
+ 
+  (1..WORKER_NODES).each do |i|
+    config.vm.define "docker#{i}" do |subconfig|
+	subconfig.vm.box = BASE_IMAGE
+	subconfig.vm.host_name = "docker#{i}"
+	subconfig.vm.synced_folder ".", "/vagrantshare"
+	subconfig.vm.network "private_network", type: "dhcp"
+	subconfig.vm.provision "shell", inline: $INSTALLDOCKERCE
+	subconfig.vm.provision "shell", inline: $CONFIGUREDOCKER
+	subconfig.vm.provision "shell", inline: $JOINSWARM
+	
+	subconfig.vm.provider :virtualbox do |vb|
+          vb.customize ["modifyvm", :id, "--memory", WORKERMEM ]
+          vb.customize ["modifyvm", :id, "--cpus", WORKERCPUS ]
+        end
+  end
+
+end
+end

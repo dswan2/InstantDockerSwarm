@@ -1,5 +1,6 @@
-# Version:   Vagranfile.portable.simplified.
+# Version:   Vagranfile.portable.simplified.NoKubernetes
 # Note:  vm.synced_folder requires first running "vagrant plugin install vagrant-vbguest"
+# This script and README.dm @ https://github.com/dswan2/InstantDockerSwarmCluster
 
 # A script to install docker Community Edition
 $INSTALLDOCKERCE = <<EOF
@@ -24,7 +25,7 @@ EOF
 # A script to Initialize the swarm for managers
 $INITSWARM = <<EOF
 echo "Initializing swarm... (Manager only)"
-[ -e /var/tmp/swarm_init ] || docker swarm init --advertise-addr eth1 && touch /var/tmp/swarm_init
+[ -e /var/tmp/swarm_exists ] || docker swarm init --advertise-addr eth1 && touch /var/tmp/swarm_exists
 docker swarm join-token worker  |grep join > /vagrantshare/joinswarm.sh
 EOF
 

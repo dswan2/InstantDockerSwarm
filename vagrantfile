@@ -8,17 +8,25 @@ echo "Installing Docker CE...."
 #yum update -y		# Commented out to speed up provisioning.  
 rpm -e *docker*		# Remove any pre-installed docker.  
 yum -y install yum-utils device-mapper-peristent-data lvm2   # Docker Prereqs.
-yum -y install libnss-mdns avahi-daemon 	 # Enable multicast DNS.
 yum -y install elinks		# Useful for testing httpd services.
 yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 yum -y install docker-ce
 systemctl enable docker && systemctl start docker 
 EOF
 
-# A script to Setup Docker storage
+# A script to configure mDNS (Self-configuring DNS so hosts can see each other.)
+$INSTALLMDNS = <<EOF
+echo "Setting up Avahi/Mdns..."
+yum install -y epel-release; 
+yum install -y avahi-dnsconfd avahi-tools nss-mdns 
+systemctl start avahi-daemon && systemctl enable avahi-daemon
+EOF
+
+# A script to configure docker
 $CONFIGUREDOCKER = <<EOF
 echo "Setting up docker Storage..."
 echo "{ "storage driver":"devicemapper" }" >> /etc/docker.daemon.json 
+usermod -aG docker vagrant
 systemctl restart docker  
 EOF
 
@@ -52,6 +60,7 @@ Vagrant.configure("2") do |config|
 	subconfig.vm.network "private_network", type: "dhcp"
 
 	subconfig.vm.provision "shell", inline: $INSTALLDOCKERCE
+#	subconfig.vm.provision "shell", inline: $INSTALLMDNS   # Commented out to speed up provisioning.
 	subconfig.vm.provision "shell", inline: $CONFIGUREDOCKER
 	subconfig.vm.provision "shell", inline: $INITSWARM
 
@@ -68,6 +77,7 @@ Vagrant.configure("2") do |config|
 	subconfig.vm.synced_folder ".", "/vagrantshare"
 	subconfig.vm.network "private_network", type: "dhcp"
 	subconfig.vm.provision "shell", inline: $INSTALLDOCKERCE
+#	subconfig.vm.provision "shell", inline: $INSTALLMDNS  # Commented out to speed up provisioning.
 	subconfig.vm.provision "shell", inline: $CONFIGUREDOCKER
 	subconfig.vm.provision "shell", inline: $JOINSWARM
 	
@@ -79,3 +89,5 @@ Vagrant.configure("2") do |config|
 
 end
 end
+
+
